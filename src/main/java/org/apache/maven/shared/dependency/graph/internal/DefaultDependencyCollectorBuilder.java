@@ -20,7 +20,6 @@ package org.apache.maven.shared.dependency.graph.internal;
  */
 
 import org.apache.maven.artifact.resolver.filter.ArtifactFilter;
-import org.apache.maven.execution.MavenSession;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilder;
@@ -36,7 +35,7 @@ import org.codehaus.plexus.logging.AbstractLogEnabled;
 import org.codehaus.plexus.personality.plexus.lifecycle.phase.Contextualizable;
 
 /**
- * Default project dependency raw dependency collector API, providing an abstraction layer against Maven 3 and Maven
+ * Default project dependency raw dependency collector API, providing an abstraction layer against Maven
  * 3.1+ particular Aether implementations.
  * 
  * @author Gabriel Belingueres
@@ -55,17 +54,15 @@ public class DefaultDependencyCollectorBuilder
     {
         try
         {
-            String hint = isMaven31() ? "maven31" : "maven3";
 
             DependencyCollectorBuilder effectiveGraphBuilder =
-                (DependencyCollectorBuilder) container.lookup( DependencyCollectorBuilder.class.getCanonicalName(),
-                                                               hint );
+                    container.lookup( DependencyCollectorBuilder.class, "maven31" );
 
             if ( getLogger().isDebugEnabled() )
             {
                 MavenProject project = buildingRequest.getProject();
 
-                getLogger().debug( "building " + hint + " RAW dependency tree for " + project.getId() + " with "
+                getLogger().debug( "building Maven 3.1+ RAW dependency tree for " + project.getId() + " with "
                     + effectiveGraphBuilder.getClass().getSimpleName() );
             }
 
@@ -74,23 +71,6 @@ public class DefaultDependencyCollectorBuilder
         catch ( ComponentLookupException e )
         {
             throw new DependencyCollectorBuilderException( e.getMessage(), e );
-        }
-    }
-
-    /**
-     * @return true if the current Maven version is Maven 3.1.
-     */
-    protected static boolean isMaven31()
-    {
-        try
-        {
-            Class<?> repoSessionClass =  MavenSession.class.getMethod( "getRepositorySession" ).getReturnType();
-            
-            return "org.eclipse.aether.RepositorySystemSession".equals( repoSessionClass.getName() );
-        }
-        catch ( NoSuchMethodException e )
-        {
-            throw new IllegalStateException( "Cannot determine return type of MavenSession.getRepositorySession" );
         }
     }
 

@@ -19,13 +19,13 @@ package org.apache.maven.shared.dependency.graph.internal;
  * under the License.
  */
 
+import static org.apache.maven.RepositoryUtils.toArtifact;
 import static org.eclipse.aether.util.graph.manager.DependencyManagerUtils.NODE_DATA_PREMANAGED_VERSION;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.maven.RepositoryUtils;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.resolver.filter.ArtifactFilter;
 import org.apache.maven.project.DefaultDependencyResolutionRequest;
@@ -44,7 +44,6 @@ import org.codehaus.plexus.logging.AbstractLogEnabled;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.graph.DependencyFilter;
 import org.eclipse.aether.graph.Exclusion;
 import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
 import org.eclipse.aether.version.VersionConstraint;
@@ -64,11 +63,8 @@ public class Maven31DependencyGraphBuilder
     @Requirement
     private ProjectDependenciesResolver resolver;
 
-    private final ExceptionHandler<DependencyGraphBuilderException> exceptionHandler;
-    
     public Maven31DependencyGraphBuilder()
     {
-        this.exceptionHandler = DependencyGraphBuilderException::new;
     }
 
     /**
@@ -85,10 +81,7 @@ public class Maven31DependencyGraphBuilder
     {
         MavenProject project = buildingRequest.getProject();
 
-        RepositorySystemSession session =
-            (RepositorySystemSession) Invoker.invoke( buildingRequest, "getRepositorySession", exceptionHandler );
-
-        
+        RepositorySystemSession session = buildingRequest.getRepositorySession();
         if ( Boolean.TRUE != session.getConfigProperties().get( NODE_DATA_PREMANAGED_VERSION ) )
         {
             DefaultRepositorySystemSession newSession = new DefaultRepositorySystemSession( session );
@@ -98,17 +91,13 @@ public class Maven31DependencyGraphBuilder
 
         final DependencyResolutionRequest request = new DefaultDependencyResolutionRequest();
         request.setMavenProject( project );
-        Invoker.invoke( request, "setRepositorySession", RepositorySystemSession.class, session );
+        request.setRepositorySession( session );
         // only download the poms, not the artifacts
-        DependencyFilter collectFilter = ( node, parents ) -> false;
-        Invoker.invoke( request, "setResolutionFilter", DependencyFilter.class, collectFilter );
+        request.setResolutionFilter( ( node, parents ) -> false );
 
-        final DependencyResolutionResult result = resolveDependencies( request );
-        org.eclipse.aether.graph.DependencyNode graph =
-            (org.eclipse.aether.graph.DependencyNode) Invoker.invoke( DependencyResolutionResult.class, result,
-                                                                      "getDependencyGraph", exceptionHandler );
+        DependencyResolutionResult result = resolveDependencies( request );
 
-        return buildDependencyNode( null, graph, project.getArtifact(), filter );
+        return buildDependencyNode( null, result.getDependencyGraph(), project.getArtifact(), filter );
     }
 
     private DependencyResolutionResult resolveDependencies( DependencyResolutionRequest request )
@@ -122,27 +111,6 @@ public class Maven31DependencyGraphBuilder
         {
             throw new DependencyGraphBuilderException( "Could not resolve following dependencies: "
                 + e.getResult().getUnresolvedDependencies(), e );
-        }
-    }
-
-    private Artifact getDependencyArtifact( Dependency dep )
-    {
-        org.eclipse.aether.artifact.Artifact artifact = dep.getArtifact();
-
-        try
-        {
-            Artifact mavenArtifact = (Artifact) Invoker.invoke( RepositoryUtils.class, "toArtifact",
-                                              org.eclipse.aether.artifact.Artifact.class, artifact, exceptionHandler );
-
-            mavenArtifact.setScope( dep.getScope() );
-            mavenArtifact.setOptional( dep.isOptional() );
-
-            return mavenArtifact;
-        }
-        catch ( DependencyGraphBuilderException e )
-        {
-            // ReflectionException should not happen
-            throw new RuntimeException( e.getMessage(), e );
         }
     }
 
@@ -174,11 +142,14 @@ public class Maven31DependencyGraphBuilder
         List<DependencyNode> nodes = new ArrayList<>( node.getChildren().size() );
         for ( org.eclipse.aether.graph.DependencyNode child : node.getChildren() )
         {
-            Artifact childArtifact = getDependencyArtifact( child.getDependency() );
+            Dependency dep = child.getDependency();
+            Artifact mavenArtifact = toArtifact( dep.getArtifact() );
+            mavenArtifact.setScope( dep.getScope() );
+            mavenArtifact.setOptional( dep.isOptional() );
 
-            if ( ( filter == null ) || filter.include( childArtifact ) )
+            if ( ( filter == null ) || filter.include( mavenArtifact ) )
             {
-                nodes.add( buildDependencyNode( current, child, childArtifact, filter ) );
+                nodes.add( buildDependencyNode( current, child, mavenArtifact, filter ) );
             }
         }
 

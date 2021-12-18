@@ -40,6 +40,7 @@ import org.codehaus.plexus.component.annotations.Requirement;
 import org.codehaus.plexus.logging.AbstractLogEnabled;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.ArtifactTypeRegistry;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.collection.CollectResult;
@@ -59,6 +60,8 @@ import org.eclipse.aether.util.graph.transformer.NearestVersionSelector;
 import org.eclipse.aether.util.graph.transformer.SimpleOptionalitySelector;
 import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
 import org.eclipse.aether.version.VersionConstraint;
+
+import static org.apache.maven.RepositoryUtils.toArtifact;
 
 /**
  * Project dependency raw dependency collector API, abstracting Maven 3.1+'s Aether implementation.
@@ -93,9 +96,15 @@ public class Maven31DependencyCollectorBuilder
             Artifact projectArtifact = project.getArtifact();
             List<ArtifactRepository> remoteArtifactRepositories = project.getRemoteArtifactRepositories();
 
-            DefaultRepositorySystemSession repositorySession =
-                (DefaultRepositorySystemSession) Invoker.invoke( buildingRequest, "getRepositorySession",
-                                                                 exceptionHandler );
+            RepositorySystemSession repositorySession;
+            try
+            {
+                repositorySession = buildingRequest.getRepositorySession();
+            }
+            catch ( Exception e )
+            {
+                throw exceptionHandler.create( e.getMessage(), e );
+            }
 
             session = new DefaultRepositorySystemSession( repositorySession );
 
@@ -113,17 +122,25 @@ public class Maven31DependencyCollectorBuilder
             session.setConfigProperty( ConflictResolver.CONFIG_PROP_VERBOSE, true );
             session.setConfigProperty( DependencyManagerUtils.CONFIG_PROP_VERBOSE, true );
 
-            org.eclipse.aether.artifact.Artifact aetherArtifact =
-                (org.eclipse.aether.artifact.Artifact) Invoker.invoke( RepositoryUtils.class, "toArtifact",
-                                                                       Artifact.class, projectArtifact,
-                                                                       exceptionHandler );
+            org.eclipse.aether.artifact.Artifact aetherArtifact;
+            try
+            {
+                aetherArtifact = RepositoryUtils.toArtifact( projectArtifact );
+            }
+            catch ( Exception e )
+            {
+                throw exceptionHandler.create( e.getMessage(), e );
+            }
 
-            @SuppressWarnings( "unchecked" )
-            List<org.eclipse.aether.repository.RemoteRepository> aetherRepos =
-                (List<org.eclipse.aether.repository.RemoteRepository>) Invoker.invoke( RepositoryUtils.class, "toRepos",
-                                                                                       List.class,
-                                                                                       remoteArtifactRepositories,
-                                                                                       exceptionHandler );
+            List<org.eclipse.aether.repository.RemoteRepository> aetherRepos;
+            try
+            {
+                aetherRepos = RepositoryUtils.toRepos( remoteArtifactRepositories );
+            }
+            catch ( Exception e )
+            {
+                throw exceptionHandler.create( e.getMessage(), e );
+            }
 
             CollectRequest collectRequest = new CollectRequest();
             collectRequest.setRootArtifact( aetherArtifact );
@@ -202,8 +219,7 @@ public class Maven31DependencyCollectorBuilder
     {
         for ( Dependency dependency : project.getDependencies() )
         {
-            org.eclipse.aether.graph.Dependency aetherDep = toAetherDependency( stereotypes, dependency );
-            collectRequest.addDependency( aetherDep );
+            collectRequest.addDependency( toAetherDependency( stereotypes, dependency ) );
         }
     }
 
@@ -212,33 +228,23 @@ public class Maven31DependencyCollectorBuilder
                                                                     Dependency dependency )
         throws DependencyCollectorBuilderException
     {
-        return (org.eclipse.aether.graph.Dependency) Invoker.invoke( RepositoryUtils.class, "toDependency",
-                                                              Dependency.class,
-                                                              ArtifactTypeRegistry.class,
-                                                              dependency, stereotypes, exceptionHandler );
+        try
+        {
+            return RepositoryUtils.toDependency( dependency, stereotypes );
+        }
+        catch ( Exception e )
+        {
+            throw exceptionHandler.create( e.getMessage(), e );
+        }
     }
     // CHECKSTYLE_ON: LineLength
 
     private Artifact getDependencyArtifact( org.eclipse.aether.graph.Dependency dep )
     {
-        org.eclipse.aether.artifact.Artifact artifact = dep.getArtifact();
-
-        try
-        {
-            Artifact mavenArtifact =
-                (Artifact) Invoker.invoke( RepositoryUtils.class, "toArtifact",
-                                           org.eclipse.aether.artifact.Artifact.class, artifact, exceptionHandler );
-
-            mavenArtifact.setScope( dep.getScope() );
-            mavenArtifact.setOptional( dep.isOptional() );
-
-            return mavenArtifact;
-        }
-        catch ( DependencyCollectorBuilderException e )
-        {
-            // ReflectionException should not happen
-            throw new RuntimeException( e.getMessage(), e );
-        }
+        Artifact mavenArtifact = toArtifact( dep.getArtifact() );
+        mavenArtifact.setScope( dep.getScope() );
+        mavenArtifact.setOptional( dep.isOptional() );
+        return mavenArtifact;
     }
 
     private DependencyNode buildDependencyNode( DependencyNode parent, org.eclipse.aether.graph.DependencyNode node,

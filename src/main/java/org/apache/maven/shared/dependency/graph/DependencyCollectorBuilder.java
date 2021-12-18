@@ -23,7 +23,7 @@ import org.apache.maven.artifact.resolver.filter.ArtifactFilter;
 import org.apache.maven.project.ProjectBuildingRequest;
 
 /**
- * Maven project dependency raw dependency collector API, providing an abstraction layer against Maven 3 and Maven 3.1+
+ * Maven project dependency raw dependency collector API, providing an abstraction layer against Maven 3.1+
  * particular Aether implementations.
  * 
  * @author Gabriel Belingueres
